@@ -1,24 +1,26 @@
-slock - simple screen locker
-============================
-simple screen locker utility for X. 
+clicklock - screen locker for touch kiosk devices (based on slock)
+==================================================================
+If you need to catch the first touch event to prevent blind clicks on a
+blanked touchscreen.
 
 
 Requirements
 ------------
-In order to build slock you need the Xlib header files.
+In order to build clicklock you need the Xlib header files.
 
 
 Installation
 ------------
-Edit config.mk to match your local setup (slock is installed into
+Edit config.mk to match your local setup (clicklock is installed into
 the /usr/local namespace by default).
 
-Afterwards enter the following command to build and install slock
+Afterwards enter the following command to build and install clicklock
 (if necessary as root):
 
     make clean install
 
 
-Running slock
+Running clicklock
 -------------
-Simply invoke the 'slock' command. To get out of it, enter your password.
+Simply invoke the 'clicklock' command. To get out of it, press a any key or
+click with mouse.

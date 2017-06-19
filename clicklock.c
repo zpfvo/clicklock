@@ -1,27 +1,16 @@
 /* See LICENSE file for license details. */
 #define _XOPEN_SOURCE 500
-#if HAVE_SHADOW_H
-#include <shadow.h>
-#endif
 
 #include <ctype.h>
 #include <errno.h>
-#include <pwd.h>
+// #include <pwd.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <X11/extensions/Xrandr.h>
-#include <X11/keysym.h>
 #include <X11/Xlib.h>
-#include <X11/Xutil.h>
-
-#if HAVE_BSD_AUTH
-#include <login_cap.h>
-#include <bsd_auth.h>
-#endif
 
 enum {
 	INIT,
@@ -30,7 +19,11 @@ enum {
 	NUMCOLS
 };
 
-#include "config.h"
+static const char *colorname[NUMCOLS] = {
+	[INIT] =   "black",     /* after initialization */
+	[INPUT] =  "#005577",   /* during input */
+	[FAILED] = "#CC3333",   /* wrong password */
+};
 
 typedef struct {
 	int screen;
@@ -42,10 +35,6 @@ typedef struct {
 static Lock **locks;
 static int nscreens;
 static Bool running = True;
-static Bool failure = False;
-static Bool rr;
-static int rrevbase;
-static int rrerrbase;
 
 static void
 die(const char *errstr, ...)
@@ -81,127 +70,20 @@ dontkillme(void)
 		die("buffer too small\n");
 
 	if (fd < 0 || write(fd, value, length) != length || close(fd) != 0)
-		die("cannot disable the out-of-memory killer for this process (make sure to suid or sgid slock)\n");
-}
-#endif
-
-#ifndef HAVE_BSD_AUTH
-/* only run as root */
-static const char *
-getpw(void)
-{
-	const char *rval;
-	struct passwd *pw;
-
-	errno = 0;
-	if (!(pw = getpwuid(getuid()))) {
-		if (errno)
-			die("slock: getpwuid: %s\n", strerror(errno));
-		else
-			die("slock: cannot retrieve password entry\n");
-	}
-	rval = pw->pw_passwd;
-
-#if HAVE_SHADOW_H
-	if (rval[0] == 'x' && rval[1] == '\0') {
-		struct spwd *sp;
-		if (!(sp = getspnam(getenv("USER"))))
-			die("slock: cannot retrieve shadow entry (make sure to suid or sgid slock)\n");
-		rval = sp->sp_pwdp;
-	}
-#endif
-
-	/* drop privileges */
-	if (geteuid() == 0 &&
-	    ((getegid() != pw->pw_gid && setgid(pw->pw_gid) < 0) || setuid(pw->pw_uid) < 0))
-		die("slock: cannot drop privileges\n");
-	return rval;
+		die("cannot disable the out-of-memory killer for this process (make sure to suid or sgid clicklock)\n");
 }
 #endif
 
 static void
-#ifdef HAVE_BSD_AUTH
-readpw(Display *dpy)
-#else
-readpw(Display *dpy, const char *pws)
-#endif
+waitforevent(Display *dpy)
 {
-	char buf[32], passwd[256];
-	int num, screen;
-	unsigned int len, color;
-	KeySym ksym;
 	XEvent ev;
-	static int oldc = INIT;
 
-	len = 0;
 	running = True;
-
-	/* As "slock" stands for "Simple X display locker", the DPMS settings
-	 * had been removed and you can set it with "xset" or some other
-	 * utility. This way the user can easily set a customized DPMS
-	 * timeout. */
 	while (running && !XNextEvent(dpy, &ev)) {
-		if (ev.type == KeyPress) {
-			buf[0] = 0;
-			num = XLookupString(&ev.xkey, buf, sizeof(buf), &ksym, 0);
-			if (IsKeypadKey(ksym)) {
-				if (ksym == XK_KP_Enter)
-					ksym = XK_Return;
-				else if (ksym >= XK_KP_0 && ksym <= XK_KP_9)
-					ksym = (ksym - XK_KP_0) + XK_0;
-			}
-			if (IsFunctionKey(ksym) ||
-			    IsKeypadKey(ksym) ||
-			    IsMiscFunctionKey(ksym) ||
-			    IsPFKey(ksym) ||
-			    IsPrivateKeypadKey(ksym))
-				continue;
-			switch (ksym) {
-			case XK_Return:
-				passwd[len] = 0;
-#ifdef HAVE_BSD_AUTH
-				running = !auth_userokay(getlogin(), NULL, "auth-xlock", passwd);
-#else
-				running = !!strcmp(crypt(passwd, pws), pws);
-#endif
-				if (running) {
-					XBell(dpy, 100);
-					failure = True;
-				}
-				len = 0;
-				break;
-			case XK_Escape:
-				len = 0;
-				break;
-			case XK_BackSpace:
-				if (len)
-					--len;
-				break;
-			default:
-				if (num && !iscntrl((int)buf[0]) && (len + num < sizeof(passwd))) {
-					memcpy(passwd + len, buf, num);
-					len += num;
-				}
-				break;
-			}
-			color = len ? INPUT : (failure || failonclear ? FAILED : INIT);
-			if (running && oldc != color) {
-				for (screen = 0; screen < nscreens; screen++) {
-					XSetWindowBackground(dpy, locks[screen]->win, locks[screen]->colors[color]);
-					XClearWindow(dpy, locks[screen]->win);
-				}
-				oldc = color;
-			}
-		} else if (rr && ev.type == rrevbase + RRScreenChangeNotify) {
-			XRRScreenChangeNotifyEvent *rre = (XRRScreenChangeNotifyEvent*)&ev;
-			for (screen = 0; screen < nscreens; screen++) {
-				if (locks[screen]->win == rre->window) {
-					XResizeWindow(dpy, locks[screen]->win, rre->width, rre->height);
-					XClearWindow(dpy, locks[screen]->win);
-				}
-			}
-		} else for (screen = 0; screen < nscreens; screen++)
-			XRaiseWindow(dpy, locks[screen]->win);
+		if (ev.type == KeyPress || ev.type == ButtonPress) {
+			running = False;
+		}
 	}
 }
 
@@ -251,8 +133,7 @@ lockscreen(Display *dpy, int screen)
 	invisible = XCreatePixmapCursor(dpy, lock->pmap, lock->pmap, &color, &color, 0, 0);
 	XDefineCursor(dpy, lock->win, invisible);
 	XMapRaised(dpy, lock->win);
-	if (rr)
-		XRRSelectInput(dpy, lock->win, RRScreenChangeNotifyMask);
+
 
 	/* Try to grab mouse pointer *and* keyboard, else fail the lock */
 	for (len = 1000; len; len--) {
@@ -262,7 +143,7 @@ lockscreen(Display *dpy, int screen)
 		usleep(1000);
 	}
 	if (!len) {
-		fprintf(stderr, "slock: unable to grab mouse pointer for screen %d\n", screen);
+		fprintf(stderr, "clicklock: unable to grab mouse pointer for screen %d\n", screen);
 	} else {
 		for (len = 1000; len; len--) {
 			if (XGrabKeyboard(dpy, lock->root, True, GrabModeAsync, GrabModeAsync, CurrentTime) == GrabSuccess) {
@@ -272,7 +153,7 @@ lockscreen(Display *dpy, int screen)
 			}
 			usleep(1000);
 		}
-		fprintf(stderr, "slock: unable to grab keyboard for screen %d\n", screen);
+		fprintf(stderr, "clicklock: unable to grab keyboard for screen %d\n", screen);
 	}
 	/* grabbing one of the inputs failed */
 	running = 0;
@@ -283,20 +164,17 @@ lockscreen(Display *dpy, int screen)
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: slock [-v|POST_LOCK_CMD]\n");
+	fprintf(stderr, "usage: clicklock [-v|POST_LOCK_CMD]\n");
 	exit(1);
 }
 
 int
 main(int argc, char **argv) {
-#ifndef HAVE_BSD_AUTH
-	const char *pws;
-#endif
 	Display *dpy;
 	int screen;
 
 	if ((argc == 2) && !strcmp("-v", argv[1]))
-		die("slock-%s, © 2006-2016 slock engineers\n", VERSION);
+		die("clicklock based on: slock-%s, © 2006-2016 slock engineers\n", VERSION);
 
 	if ((argc == 2) && !strcmp("-h", argv[1]))
 		usage();
@@ -305,20 +183,12 @@ main(int argc, char **argv) {
 	dontkillme();
 #endif
 
-	if (!getpwuid(getuid()))
-		die("slock: no passwd entry for you\n");
-
-#ifndef HAVE_BSD_AUTH
-	pws = getpw();
-#endif
-
 	if (!(dpy = XOpenDisplay(0)))
-		die("slock: cannot open display\n");
-	rr = XRRQueryExtension(dpy, &rrevbase, &rrerrbase);
+		die("clicklock: cannot open display\n");
 	/* Get the number of screens in display "dpy" and blank them all. */
 	nscreens = ScreenCount(dpy);
 	if (!(locks = malloc(sizeof(Lock*) * nscreens)))
-		die("slock: malloc: %s\n", strerror(errno));
+		die("clicklock: malloc: %s\n", strerror(errno));
 	int nlocks = 0;
 	for (screen = 0; screen < nscreens; screen++) {
 		if ((locks[screen] = lockscreen(dpy, screen)) != NULL)
@@ -337,15 +207,10 @@ main(int argc, char **argv) {
 		if (dpy)
 			close(ConnectionNumber(dpy));
 		execvp(argv[1], argv+1);
-		die("slock: execvp %s failed: %s\n", argv[1], strerror(errno));
+		die("clicklock: execvp %s failed: %s\n", argv[1], strerror(errno));
 	}
 
-	/* Everything is now blank. Now wait for the correct password. */
-#ifdef HAVE_BSD_AUTH
-	readpw(dpy);
-#else
-	readpw(dpy, pws);
-#endif
+	waitforevent(dpy);
 
 	/* Password ok, unlock everything and quit. */
 	for (screen = 0; screen < nscreens; screen++)

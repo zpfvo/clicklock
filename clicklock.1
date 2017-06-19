@@ -1,13 +1,13 @@
-.TH SLOCK 1 slock\-VERSION
+.TH CLICKLOCK 1 clicklock\-VERSION
 .SH NAME
-slock \- simple X display locker
+clicklock \- simple X display locker
 .SH SYNOPSIS
-.B slock
+.B clicklock
 .RB [ \-v
 |
 .IR post_lock_command ]
 .SH DESCRIPTION
-.B slock
+.B clicklock
 is a screen locker for X. If provided, the
 .IR post_lock_command
 will be executed when the screen is locked.
@@ -16,9 +16,9 @@ will be executed when the screen is locked.
 .B \-v
 prints version information to stdout, then exits.
 .SH EXAMPLES
-$ slock /usr/sbin/s2ram
+$ clicklock /usr/sbin/s2ram
 .SH CUSTOMIZATION
-.B slock
+.B clicklock
 can be customized by creating a custom config.h and (re)compiling the source
 code. This keeps it fast, secure and simple.
 .SH AUTHORS
