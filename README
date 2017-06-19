@@ -11,13 +11,11 @@ In order to build clicklock you need the Xlib header files.
 
 Installation
 ------------
-Edit config.mk to match your local setup (clicklock is installed into
-the /usr/local namespace by default).
 
-Afterwards enter the following command to build and install clicklock
-(if necessary as root):
-
-    make clean install
+    autoreconf --force --install
+    ./configure
+    make
+    make install
 
 
 Running clicklock
