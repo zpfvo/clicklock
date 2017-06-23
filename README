@@ -20,5 +20,7 @@ Installation
 
 Running clicklock
 -------------
-Simply invoke the 'clicklock' command. To get out of it, press a any key or
-click with mouse.
+Use the programm together with xssstart from https://github.com/unixdj/xssstart
+You can run it using
+
+    xssstart clicklock
