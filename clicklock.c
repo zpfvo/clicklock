@@ -47,33 +47,6 @@ die(const char *errstr, ...)
 	exit(1);
 }
 
-#ifdef __linux__
-#include <fcntl.h>
-#include <linux/oom.h>
-
-static void
-dontkillme(void)
-{
-	int fd;
-	int length;
-	char value[64];
-
-	fd = open("/proc/self/oom_score_adj", O_WRONLY);
-	if (fd < 0 && errno == ENOENT)
-		return;
-
-	/* convert OOM_SCORE_ADJ_MIN to string for writing */
-	length = snprintf(value, sizeof(value), "%d\n", OOM_SCORE_ADJ_MIN);
-
-	/* bail on truncation */
-	if (length >= sizeof(value))
-		die("buffer too small\n");
-
-	if (fd < 0 || write(fd, value, length) != length || close(fd) != 0)
-		die("cannot disable the out-of-memory killer for this process (make sure to suid or sgid clicklock)\n");
-}
-#endif
-
 static void
 waitforevent(Display *dpy)
 {
@@ -178,10 +151,6 @@ main(int argc, char **argv) {
 
 	if ((argc == 2) && !strcmp("-h", argv[1]))
 		usage();
-
-#ifdef __linux__
-	dontkillme();
-#endif
 
 	if (!(dpy = XOpenDisplay(0)))
 		die("clicklock: cannot open display\n");
